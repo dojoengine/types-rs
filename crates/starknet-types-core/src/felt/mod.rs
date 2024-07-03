@@ -950,7 +950,11 @@ mod serde_impl {
         where
             D: ::serde::Deserializer<'de>,
         {
-            deserializer.deserialize_str(FeltVisitor)
+            if deserializer.is_human_readable() {
+                deserializer.deserialize_str(FeltVisitor)
+            } else {
+                deserializer.deserialize_bytes(FeltVisitor)
+            }
         }
     }
 
@@ -974,6 +978,35 @@ mod serde_impl {
                 .map(Felt)
                 .ok_or(String::from("Expected hex string to be prefixed by '0x'"))
                 .map_err(de::Error::custom)
+        }
+
+        fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            if v.len() != 32 {
+                return Err(E::custom(format!("Expected 32 bytes, got {}", v.len())));
+            }
+            Ok(Felt::from_bytes_be_slice(v))
+        }
+
+        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+        where
+            A: de::SeqAccess<'de>,
+        {
+            let mut bytes = Vec::with_capacity(32);
+            while let Some(byte) = seq.next_element()? {
+                bytes.push(byte);
+            }
+
+            if bytes.len() != 32 {
+                return Err(de::Error::custom(format!(
+                    "Expected 32 bytes, got {}",
+                    bytes.len()
+                )));
+            }
+
+            Ok(Felt::from_bytes_be_slice(&bytes))
         }
     }
 }
